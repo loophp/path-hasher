@@ -254,22 +254,33 @@ final class NAR implements PathHasher
 
         yield from $this->generateStringChunk('contents');
 
-        $size = filesize($p);
-
-        if (false === $size) {
-            throw new \RuntimeException("Cannot get size of file: {$p}");
-        }
-
-        yield $this->u64le($size);
-
-        $fileHandle = fopen($p, 'r');
+        $fileHandle = @fopen($p, 'r');
 
         if (false === $fileHandle) {
             throw new \RuntimeException("Cannot open file for reading: {$p}");
         }
 
+        // Use fstat -> size to avoid a separate filesize() call (race + extra syscall).
+        $stat = fstat($fileHandle);
+        $size = $stat['size'] ?? null;
+
+        if (!\is_int($size)) {
+            fclose($fileHandle);
+
+            throw new \RuntimeException("Cannot get size of file: {$p}");
+        }
+
+        yield $this->u64le($size);
+
         while (!feof($fileHandle)) {
-            yield fread($fileHandle, 8192);
+            $chunk = fread($fileHandle, 8192);
+            if (false === $chunk) {
+                fclose($fileHandle);
+
+                throw new \RuntimeException("Error reading file: {$p}");
+            }
+
+            yield $chunk;
         }
         fclose($fileHandle);
 
