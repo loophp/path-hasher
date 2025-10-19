@@ -146,6 +146,7 @@ final class NAR implements PathHasher
         $tmp = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
 
         $handle = @fopen($tmp, 'w');
+
         if (false === $handle) {
             throw new \RuntimeException("Cannot open temporary file for writing: {$tmp}");
         }
@@ -248,45 +249,38 @@ final class NAR implements PathHasher
     /**
      * @return \Generator<string>
      */
-    private function generateStringChunk(string $s): \Generator
+    private function generateStringChunk(string ...$strings): \Generator
     {
-        // str(s) = uint64LE(length) + s + zero-padding to a multiple of 8 bytes
-        $len = \strlen($s);
+        foreach ($strings as $s) {
+            // str(s) = uint64LE(length) + s + zero-padding to a multiple of 8 bytes
+            $len = \strlen($s);
 
-        yield $this->u64le($len);
+            yield $this->u64le($len);
 
-        yield $s;
-        $pad = (8 - ($len % 8)) % 8;
+            yield $s;
+            $pad = (8 - ($len % 8)) % 8;
 
-        if ($pad) {
-            yield str_repeat("\x00", $pad);
+            if ($pad) {
+                yield str_repeat("\x00", $pad);
+            }
         }
     }
 
     private function handleDirectory(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type');
-
-        yield from $this->generateStringChunk('directory');
+        yield from $this->generateStringChunk('type', 'directory');
 
         $iterator = new SortIterableAggregate(
-            new \RecursiveDirectoryIterator(
+            new \FilesystemIterator(
                 $p,
                 \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::UNIX_PATHS
             ),
-            static fn (\SplFileInfo $a, \SplFileInfo $b): int => $a->getPathname() <=> $b->getPathname()
+            // As per Nix specification, directory entries must be sorted by name.
+            static fn (\SplFileInfo $a, \SplFileInfo $b): int => $a->getFilename() <=> $b->getFilename()
         );
 
         foreach ($iterator as $entry) {
-            yield from $this->generateStringChunk('entry');
-
-            yield from $this->generateStringChunk('(');
-
-            yield from $this->generateStringChunk('name');
-
-            yield from $this->generateStringChunk(substr($entry->getPathname(), \strlen($p) + 1));
-
-            yield from $this->generateStringChunk('node');
+            yield from $this->generateStringChunk('entry', '(', 'name', $entry->getFilename(), 'node');
 
             yield from $this->generateObjectChunk($entry->getPathname());
 
@@ -299,17 +293,11 @@ final class NAR implements PathHasher
      */
     private function handleRegularFile(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type');
-
-        yield from $this->generateStringChunk('regular');
+        yield from $this->generateStringChunk('type', 'regular');
 
         if (is_file($p) && is_executable($p)) {
-            yield from $this->generateStringChunk('executable');
-
-            yield from $this->generateStringChunk('');
+            yield from $this->generateStringChunk('executable', '');
         }
-
-        yield from $this->generateStringChunk('contents');
 
         $fileHandle = @fopen($p, 'r');
 
@@ -326,6 +314,8 @@ final class NAR implements PathHasher
 
             throw new \RuntimeException("Cannot get size of file: {$p}");
         }
+
+        yield from $this->generateStringChunk('contents');
 
         yield $this->u64le($size);
 
@@ -350,13 +340,7 @@ final class NAR implements PathHasher
 
     private function handleSymlink(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type');
-
-        yield from $this->generateStringChunk('symlink');
-
-        yield from $this->generateStringChunk('target');
-
-        yield from $this->generateStringChunk(readlink($p) ?: '');
+        yield from $this->generateStringChunk('type', 'symlink', 'target', readlink($p) ?: '');
     }
 
     /**
