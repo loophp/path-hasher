@@ -65,6 +65,9 @@ final class NAR implements PathHasher
      */
     private const NIX_BASE32 = '0123456789abcdfghijklmnpqrsvwxyz';
 
+    /**
+     * @var string Hash algorithm (e.g., 'sha256', 'sha512').
+     */
     private string $hashAlgorithm;
 
     public function __construct(string $hashAlgorithm = 'sha256')
@@ -82,7 +85,7 @@ final class NAR implements PathHasher
      *
      * @throws \RuntimeException if the path is missing or unreadable
      */
-    public function dumpNar(string $path): \Generator
+    public function stream(string $path): \Generator
     {
         if (!file_exists($path) && !is_link($path)) {
             throw new \RuntimeException("Path not found: {$path}");
@@ -95,9 +98,7 @@ final class NAR implements PathHasher
 
     public function hash(string $path): string
     {
-        $hashes = $this->hashPath($path);
-
-        return $hashes['sri'];
+        return $this->computeHashes($path)['sri'];
     }
 
     /**
@@ -109,22 +110,21 @@ final class NAR implements PathHasher
      *
      * @throws \RuntimeException if the path does not exist or cannot be read
      */
-    public function hashPath(string $path): array
+    public function computeHashes(string $path): array
     {
         $context = hash_init($this->hashAlgorithm);
 
-        foreach ($this->dumpNar($path) as $chunk) {
+        foreach ($this->stream($path) as $chunk) {
             hash_update($context, $chunk);
         }
 
         $raw = hash_final($context, true);
 
-        $hex = bin2hex($raw);
-        $b64 = base64_encode($raw);
-        $sri = \sprintf('%s-%s', $this->hashAlgorithm, $b64);
-        $nix32 = $this->toNixBase32($raw);
-
-        return ['hex' => $hex, 'sri' => $sri, 'nix32' => $nix32];
+        return [
+            'hex' => bin2hex($raw),
+            'nix32' => $this->toNixBase32($raw),
+            'sri' => \sprintf('%s-%s', $this->hashAlgorithm, base64_encode($raw)),
+        ];
     }
 
     /**
@@ -133,7 +133,7 @@ final class NAR implements PathHasher
      * Implemented via successive integer division (base-256 → base-32),
      * producing least-significant-bit-first digits, then padded to the expected length.
      */
-    public function toNixBase32(string $bytes): string
+    private function toNixBase32(string $bytes): string
     {
         if ('' === $bytes) {
             return '';
@@ -214,10 +214,7 @@ final class NAR implements PathHasher
                 $p,
                 \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::UNIX_PATHS
             ),
-            static fn (\SplFileInfo $a, \SplFileInfo $b): int => strcmp(
-                $a->getPathname(),
-                $b->getPathname()
-            )
+            static fn (\SplFileInfo $a, \SplFileInfo $b): int => $a->getPathname() <=> $b->getPathname()
         );
 
         foreach ($iterator as $entry) {
