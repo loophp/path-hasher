@@ -30,6 +30,9 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v5
 
+            - name: Install Nix
+              uses: cachix/install-nix-action@v31
+
             - name: Install PHP
               uses: shivammathur/setup-php@v2
               with:
