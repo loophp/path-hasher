@@ -250,8 +250,6 @@ final class NAR implements PathHasher
     {
         if (is_file($p) && is_executable($p)) {
             yield from $this->generateStringChunk('executable');
-
-            yield from $this->generateStringChunk('');
         }
 
         yield from $this->generateStringChunk('contents');
