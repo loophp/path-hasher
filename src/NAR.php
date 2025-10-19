@@ -128,6 +128,66 @@ final class NAR implements PathHasher
     }
 
     /**
+     * Write the NAR serialization of $path into $destination file.
+     *
+     * The write is streaming and atomic (writes to a temp file in the same
+     * directory and renames it into place).
+     *
+     * @throws \RuntimeException on I/O errors
+     */
+    public function dump(string $path, string $destination): void
+    {
+        $dir = \dirname($destination);
+
+        if (!is_dir($dir) && !mkdir($dir, 0o777, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Cannot create directory: {$dir}");
+        }
+
+        $tmp = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
+
+        $handle = @fopen($tmp, 'w');
+        if (false === $handle) {
+            throw new \RuntimeException("Cannot open temporary file for writing: {$tmp}");
+        }
+
+        try {
+            foreach ($this->stream($path) as $chunk) {
+                $len = \strlen($chunk);
+                $written = 0;
+
+                while ($written < $len) {
+                    $res = fwrite($handle, substr($chunk, $written));
+                    if (false === $res) {
+                        throw new \RuntimeException("Write error to temporary file: {$tmp}");
+                    }
+                    $written += $res;
+                }
+            }
+
+            if (!fflush($handle)) {
+                throw new \RuntimeException("Failed to flush temporary file: {$tmp}");
+            }
+
+            if (!fclose($handle)) {
+                throw new \RuntimeException("Failed to close temporary file: {$tmp}");
+            }
+
+            if (!@rename($tmp, $destination)) {
+                @unlink($tmp);
+
+                throw new \RuntimeException("Failed to move temporary file to destination: {$destination}");
+            }
+        } catch (\Throwable $e) {
+            if (\is_resource($handle)) {
+                @fclose($handle);
+            }
+            @unlink($tmp);
+
+            throw $e;
+        }
+    }
+
+    /**
      * Encodes a byte string into Nix base32 (custom alphabet, LSB-first, no padding).
      *
      * Implemented via successive integer division (base-256 → base-32),
