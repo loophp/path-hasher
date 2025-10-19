@@ -14,21 +14,35 @@ use PHPUnit\Framework\TestCase;
 final class NARTest extends TestCase
 {
     #[DataProvider('provideHashCases')]
-    public function testHash(string $path, string $hash): void
+    public function testHashStability(string $path, string $hash): void
     {
         self::assertSame((new NAR())->hash($path), $hash);
+    }
+
+    #[DataProvider('provideHashCases')]
+    public function testHashComparisonWithNix(string $path): void
+    {
+        // Run the `nix hash path <path>` command to get the hash with Nix
+        $nixHash = trim((string) shell_exec(sprintf('nix hash path %s', escapeshellarg($path))));
+
+        self::assertSame((new NAR())->hash($path), $nixHash);
     }
 
     public static function provideHashCases(): iterable
     {
         yield [
-            realpath(__DIR__.'/../composer.json'),
-            'sha256-u1zL47tiE286m+1t7GzpgWCqgXa+hk/MRLVlPqdbzKo=',
+            realpath(__DIR__.'/fixtures/fs/test.md'),
+            'sha256-8Zli5QunHMIWw0Qr61FCdl2CLeLtBXUrC80Tw8PzaBY=',
         ];
 
         yield [
-            realpath(__DIR__.'/../.github'),
-            'sha256-PH3MnQGLoV94VwpvDBmZKwZzjpPE+r7t6vJ52xASNnM=',
+            realpath(__DIR__.'/fixtures/fs/dir1'),
+            'sha256-WLBm1CL8lkhnV5HwP8oFwQjb00MU/VpCeuqkLzWTrO8=',
+        ];
+
+        yield [
+            realpath(__DIR__.'/fixtures/fs/'),
+            'sha256-t9dtFcmeezsjcQX6Gm+Q5sfGAvVcF/kxdWMrjf8jWFA=',
         ];
     }
 }
