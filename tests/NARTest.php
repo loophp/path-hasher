@@ -3,19 +3,32 @@
 declare(strict_types=1);
 
 use Loophp\PathHasher\NAR;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
  * @internal
  *
- * @coversNothing
+ * @covers \Loophp\PathHasher\NAR
  */
 final class NARTest extends TestCase
 {
-    public function testExample(): void
+    #[DataProvider('provideHashCases')]
+    public function testHash(string $path, string $hash): void
     {
-        $hash = (new NAR())->hash(realpath(__DIR__.'/../composer.json'));
+        self::assertSame((new NAR())->hash($path), $hash);
+    }
 
-        self::assertSame('sha256-u1zL47tiE286m+1t7GzpgWCqgXa+hk/MRLVlPqdbzKo=', $hash);
+    public static function provideHashCases(): iterable
+    {
+        yield [
+            realpath(__DIR__.'/../composer.json'),
+            'sha256-u1zL47tiE286m+1t7GzpgWCqgXa+hk/MRLVlPqdbzKo=',
+        ];
+
+        yield [
+            realpath(__DIR__.'/../.github'),
+            'sha256-PH3MnQGLoV94VwpvDBmZKwZzjpPE+r7t6vJ52xASNnM=',
+        ];
     }
 }
