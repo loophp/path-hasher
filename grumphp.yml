@@ -1,0 +1,8 @@
+grumphp:
+    tasks:
+        composer_normalize:
+        phpcsfixer:
+            config: .php-cs-fixer.dist.php
+            verbose: true
+            allow_risky: true
+        phpunit:
