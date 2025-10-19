@@ -151,7 +151,7 @@ final class NAR implements PathHasher
                 $q = intdiv($cur, 32);
                 $carry = $cur % 32;
 
-                if (!empty($quot) || 0 < $q) {
+                if (([] !== $quot) || 0 < $q) {
                     $quot[] = $q;
                 }
             }
@@ -176,20 +176,10 @@ final class NAR implements PathHasher
     {
         yield from $this->generateStringChunk('(');
 
-        $type = match (true) {
-            is_link($p) => 'symlink',
-            is_dir($p) => 'directory',
-            default => 'regular',
-        };
-
-        yield from $this->generateStringChunk('type');
-
-        yield from $this->generateStringChunk($type);
-
-        match ($type) {
-            'symlink' => yield from $this->handleSymlink($p),
-            'directory' => yield from $this->handleDirectory($p),
-            'regular' => yield from $this->handleRegularFile($p),
+        yield from match (true) {
+            is_link($p) => $this->handleSymlink($p),
+            is_dir($p) => $this->handleDirectory($p),
+            default => $this->handleRegularFile($p),
         };
 
         yield from $this->generateStringChunk(')');
@@ -215,6 +205,10 @@ final class NAR implements PathHasher
 
     private function handleDirectory(string $p): \Generator
     {
+        yield from $this->generateStringChunk('type');
+
+        yield from $this->generateStringChunk('directory');
+
         $iterator = new SortIterableAggregate(
             new \RecursiveDirectoryIterator(
                 $p,
@@ -248,6 +242,10 @@ final class NAR implements PathHasher
      */
     private function handleRegularFile(string $p): \Generator
     {
+        yield from $this->generateStringChunk('type');
+
+        yield from $this->generateStringChunk('regular');
+
         if (is_file($p) && is_executable($p)) {
             yield from $this->generateStringChunk('executable');
         }
@@ -282,6 +280,10 @@ final class NAR implements PathHasher
 
     private function handleSymlink(string $p): \Generator
     {
+        yield from $this->generateStringChunk('type');
+
+        yield from $this->generateStringChunk('symlink');
+
         yield from $this->generateStringChunk('target');
 
         yield from $this->generateStringChunk(readlink($p) ?: '');
