@@ -89,8 +89,6 @@ For more detailed changelogs, please check [the release changelogs][45].
   https://img.shields.io/packagist/l/loophp/path-hasher.svg?style=flat-square
 [donate github]:
   https://img.shields.io/badge/Sponsor-Github-brightgreen.svg?style=flat-square
-[donate paypal]:
-  https://img.shields.io/badge/Sponsor-Paypal-brightgreen.svg?style=flat-square
 [34]: https://github.com/loophp/path-hasher/issues
 [35]: https://www.phpunit.de/
 [36]: https://github.com/phpro/grumphp
@@ -99,5 +97,3 @@ For more detailed changelogs, please check [the release changelogs][45].
 [43]: https://github.com/loophp/path-hasher/blob/main/CHANGELOG.md
 [44]: https://github.com/loophp/path-hasher/commits/main
 [45]: https://github.com/loophp/path-hasher/releases
-[48]: https://www.php.net/cachingiterator
-[49]: https://www.php.net/generator
