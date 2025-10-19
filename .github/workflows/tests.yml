@@ -2,6 +2,7 @@ on:
     push:
         paths:
             - "**.php"
+            - "**.yml"
         branches:
             - main
     pull_request:
