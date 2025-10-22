@@ -58,7 +58,11 @@ final class NARTest extends TestCase
 
         $nar = new NAR();
 
-        $nar->write($source, $this->narFile);
+        $handle = fopen($this->narFile, 'w');
+        foreach ($nar->stream($source) as $chunk) {
+            fwrite($handle, $chunk);
+        }
+        fclose($handle);
         $nar->extract($this->narFile, $this->destination);
 
         $sourceHash = $nar->computeHashes($source);
@@ -69,29 +73,23 @@ final class NARTest extends TestCase
 
     public function testDumpToStdoutAndUnpack(): void
     {
-        $source = realpath(__DIR__.'/fixtures/fs');
-
-        // Capture stdout output of dump()
-        ob_start();
-        (new NAR())->write($source, null);
-        $narData = ob_get_clean();
-
-        // Write captured NAR bytes to a temporary file and unpack from it
-        $this->narFile = tempnam(sys_get_temp_dir(), 'nar-test-');
-        if (false === $this->narFile) {
-            self::fail('Failed to create temporary nar file');
-        }
-        file_put_contents($this->narFile, $narData);
-
-        $this->destination = sys_get_temp_dir().'/nar-unpack-'.uniqid();
-
         $nar = new NAR();
+        $source = realpath(__DIR__.'/fixtures/fs');
+        $this->narFile = tempnam(sys_get_temp_dir(), 'nar-test-');
+        $this->destination = sprintf('%s/nar-unpack-%s', sys_get_temp_dir(), uniqid());
+
+        $handle = fopen($this->narFile, 'w');
+        foreach ($nar->stream($source) as $chunk) {
+            fwrite($handle, $chunk);
+        }
+        fclose($handle);
+
         $nar->extract($this->narFile, $this->destination);
 
-        $sourceHash = $nar->computeHashes($source);
-        $destinationHash = $nar->computeHashes($this->destination);
-
-        self::assertSame($sourceHash, $destinationHash);
+        self::assertSame(
+            $nar->computeHashes($source),
+            $nar->computeHashes($this->destination)
+        );
     }
 
     protected function tearDown(): void

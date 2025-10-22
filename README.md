@@ -46,7 +46,6 @@ Methods available are:
 - `hash`: Compute the
   [SRI hash](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity)
   of a given path.
-- `write`: Write the NAR archive to a file or to `STDOUT`.
 - `extract`: Extract a NAR archive to a specified directory.
 - `stream`: Get a stream generator of the NAR archive.
 - `computeHashes`: Compute hashes of the NAR archive with different algorithms.
