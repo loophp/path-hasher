@@ -7,16 +7,16 @@ declare(strict_types=1);
  *
  * WHAT IT DOES
  * ------------
- * Computes the “NAR hash” of a filesystem path — that is, the SHA-256
+ * Computes the "NAR hash" of a filesystem path — that is, the SHA-256
  * of its serialisation in the NAR (Nix ARchive) format.
  * Returns results in three encodings:
  *   - hexadecimal (64 characters, standard SHA-256)
- *   - SRI (“sha256-<base64>” form)
+ *   - SRI ("sha256-<base64>" form)
  *   - Nix base32 (custom alphabet, least-significant-bit-first; 52 characters)
  *
  * The NAR format is a deterministic serialisation used by Nix to represent
  * directories, files and symlinks independently of the underlying system.
- * The “hash of a path” in Nix corresponds exactly to:
+ * The "hash of a path" in Nix corresponds exactly to:
  *
  *     nix hash path <path>
  *
@@ -28,8 +28,8 @@ declare(strict_types=1);
  *   • Objects: "(" … ")" with ordered key/value pairs.
  *   • Supported types: "directory", "regular", "symlink".
  *   • Directory entries are sorted byte-wise by name for determinism.
- *   • Regular files include an optional “executable” key if the exec bit is set,
- *     followed by “contents" with raw file data.
+ *   • Regular files include an optional "executable" key if the exec bit is set,
+ *     followed by "contents" with raw file data.
  *
  * - Nix base32 encoding:
  *   • Alphabet: "0123456789abcdfghijklmnpqrsvwxyz" (no e, o, u, t).
@@ -137,27 +137,22 @@ final class NAR implements PathHasher
         $isStdout = null === $destination;
         $handle = null;
         $tmp = null;
+        $filename = 'php://output';
 
-        if ($isStdout) {
-            $handle = fopen('php://output', 'w');
-
-            if (false === $handle) {
-                throw new \RuntimeException('Cannot open STDOUT for writing');
-            }
-        } else {
+        if (!$isStdout) {
             $dir = \dirname($destination);
 
             if (!is_dir($dir) && !mkdir($dir, 0o777, true) && !is_dir($dir)) {
                 throw new \RuntimeException("Cannot create directory: {$dir}");
             }
 
-            $tmp = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
+            $filename = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
+        }
 
-            $handle = fopen($tmp, 'w');
+        $handle = fopen($filename, 'w');
 
-            if (false === $handle) {
-                throw new \RuntimeException("Cannot open temporary file for writing: {$tmp}");
-            }
+        if (false === $handle) {
+            throw new \RuntimeException($isStdout ? 'Cannot open STDOUT for writing' : "Cannot open temporary file for writing: {$filename}");
         }
 
         try {
@@ -168,27 +163,28 @@ final class NAR implements PathHasher
                 while ($written < $len) {
                     $res = fwrite($handle, substr($chunk, $written));
                     if (false === $res) {
-                        throw new \RuntimeException($isStdout ? 'Write error to STDOUT' : "Write error to temporary file: {$tmp}");
+                        throw new \RuntimeException($isStdout ? 'Write error to STDOUT' : "Write error to temporary file: {$filename}");
                     }
                     $written += $res;
                 }
             }
 
             if (!fflush($handle)) {
-                throw new \RuntimeException($isStdout ? 'Failed to flush STDOUT' : "Failed to flush temporary file: {$tmp}");
+                throw new \RuntimeException($isStdout ? 'Failed to flush STDOUT' : "Failed to flush temporary file: {$filename}");
             }
 
             if ($isStdout) {
-                // Do not close php://output here to avoid interfering with caller.
+                // Do not close php://output it is not needed.
+                // See https://www.php.net/manual/en/features.commandline.io-streams.php
                 return;
             }
 
             if (!fclose($handle)) {
-                throw new \RuntimeException("Failed to close temporary file: {$tmp}");
+                throw new \RuntimeException("Failed to close temporary file: {$filename}");
             }
 
-            if (!rename($tmp, $destination)) {
-                unlink($tmp);
+            if (!rename($filename, $destination)) {
+                unlink($filename);
 
                 throw new \RuntimeException("Failed to move temporary file to destination: {$destination}");
             }
@@ -196,8 +192,8 @@ final class NAR implements PathHasher
             if (\is_resource($handle) && !$isStdout) {
                 fclose($handle);
             }
-            if (!$isStdout && null !== $tmp) {
-                unlink($tmp);
+            if (!$isStdout && null !== $filename) {
+                unlink($filename);
             }
 
             throw $e;
@@ -206,8 +202,6 @@ final class NAR implements PathHasher
 
     /**
      * Extract a .nar file into $destinationPath.
-     *
-     * Preferred new name (no "Nar" suffix).
      *
      * @throws \RuntimeException on I/O or format errors
      */

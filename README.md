@@ -8,8 +8,7 @@
 
 ## Description
 
-A library to serialize a filesystem object (file, directory, symlink) into
-different hash formats.
+A library to serialize a filesystem object (file, directory, symlink).
 
 The current implementation focuses on the NAR (Nix ARchive) format used by Nix
 for deterministic path hashing.
@@ -41,6 +40,16 @@ nix hash path /path/to/your/file_or_directory
 ```
 
 The two outputs will match.
+
+Methods available are:
+
+- `hash`: Compute the
+  [SRI hash](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity)
+  of a given path.
+- `write`: Write the NAR archive to a file or to `STDOUT`.
+- `extract`: Extract a NAR archive to a specified directory.
+- `stream`: Get a stream generator of the NAR archive.
+- `computeHashes`: Compute hashes of the NAR archive with different algorithms.
 
 ## Code quality, tests, benchmarks
 
