@@ -29,7 +29,7 @@ declare(strict_types=1);
  *   • Supported types: "directory", "regular", "symlink".
  *   • Directory entries are sorted byte-wise by name for determinism.
  *   • Regular files include an optional “executable” key if the exec bit is set,
- *     followed by “contents” with raw file data.
+ *     followed by “contents" with raw file data.
  *
  * - Nix base32 encoding:
  *   • Alphabet: "0123456789abcdfghijklmnpqrsvwxyz" (no e, o, u, t).
@@ -128,27 +128,36 @@ final class NAR implements PathHasher
     }
 
     /**
-     * Write the NAR serialization of $path into $destination file.
-     *
-     * The write is streaming and atomic (writes to a temp file in the same
-     * directory and renames it into place).
+     * Write the NAR serialization of $path into $destination file or to STDOUT.
      *
      * @throws \RuntimeException on I/O errors
      */
-    public function dump(string $path, string $destination): void
+    public function write(string $path, ?string $destination = null): void
     {
-        $dir = \dirname($destination);
+        $isStdout = null === $destination;
+        $handle = null;
+        $tmp = null;
 
-        if (!is_dir($dir) && !mkdir($dir, 0o777, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Cannot create directory: {$dir}");
-        }
+        if ($isStdout) {
+            $handle = fopen('php://output', 'w');
 
-        $tmp = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
+            if (false === $handle) {
+                throw new \RuntimeException('Cannot open STDOUT for writing');
+            }
+        } else {
+            $dir = \dirname($destination);
 
-        $handle = @fopen($tmp, 'w');
+            if (!is_dir($dir) && !mkdir($dir, 0o777, true) && !is_dir($dir)) {
+                throw new \RuntimeException("Cannot create directory: {$dir}");
+            }
 
-        if (false === $handle) {
-            throw new \RuntimeException("Cannot open temporary file for writing: {$tmp}");
+            $tmp = \sprintf('%s.%s.part', $destination, uniqid('tmp', true));
+
+            $handle = fopen($tmp, 'w');
+
+            if (false === $handle) {
+                throw new \RuntimeException("Cannot open temporary file for writing: {$tmp}");
+            }
         }
 
         try {
@@ -159,32 +168,62 @@ final class NAR implements PathHasher
                 while ($written < $len) {
                     $res = fwrite($handle, substr($chunk, $written));
                     if (false === $res) {
-                        throw new \RuntimeException("Write error to temporary file: {$tmp}");
+                        throw new \RuntimeException($isStdout ? 'Write error to STDOUT' : "Write error to temporary file: {$tmp}");
                     }
                     $written += $res;
                 }
             }
 
             if (!fflush($handle)) {
-                throw new \RuntimeException("Failed to flush temporary file: {$tmp}");
+                throw new \RuntimeException($isStdout ? 'Failed to flush STDOUT' : "Failed to flush temporary file: {$tmp}");
+            }
+
+            if ($isStdout) {
+                // Do not close php://output here to avoid interfering with caller.
+                return;
             }
 
             if (!fclose($handle)) {
                 throw new \RuntimeException("Failed to close temporary file: {$tmp}");
             }
 
-            if (!@rename($tmp, $destination)) {
-                @unlink($tmp);
+            if (!rename($tmp, $destination)) {
+                unlink($tmp);
 
                 throw new \RuntimeException("Failed to move temporary file to destination: {$destination}");
             }
         } catch (\Throwable $e) {
-            if (\is_resource($handle)) {
-                @fclose($handle);
+            if (\is_resource($handle) && !$isStdout) {
+                fclose($handle);
             }
-            @unlink($tmp);
+            if (!$isStdout && null !== $tmp) {
+                unlink($tmp);
+            }
 
             throw $e;
+        }
+    }
+
+    /**
+     * Extract a .nar file into $destinationPath.
+     *
+     * Preferred new name (no "Nar" suffix).
+     *
+     * @throws \RuntimeException on I/O or format errors
+     */
+    public function extract(string $sourcePath, string $destinationPath): void
+    {
+        $handle = fopen($sourcePath, 'r');
+
+        if (false === $handle) {
+            throw new \RuntimeException("Cannot open NAR archive for reading: {$sourcePath}");
+        }
+
+        try {
+            $this->assertString($handle, 'nix-archive-1');
+            $this->unpackObject($handle, $destinationPath);
+        } finally {
+            fclose($handle);
         }
     }
 
@@ -299,7 +338,7 @@ final class NAR implements PathHasher
             yield from $this->generateStringChunk('executable', '');
         }
 
-        $fileHandle = @fopen($p, 'r');
+        $fileHandle = fopen($p, 'r');
 
         if (false === $fileHandle) {
             throw new \RuntimeException("Cannot open file for reading: {$p}");
@@ -354,5 +393,193 @@ final class NAR implements PathHasher
         $hi = ($n >> 32) & 0xFFFFFFFF;
 
         return pack('V2', $lo, $hi);
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private function assertString($handle, string $expected): void
+    {
+        $s = $this->readString($handle);
+
+        if ($s !== $expected) {
+            throw new \RuntimeException("NAR format error: expected '{$expected}', got '{$s}'");
+        }
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private function readBytes($handle, int $len): string
+    {
+        if (0 === $len) {
+            return '';
+        }
+        $bytes = fread($handle, $len);
+
+        if (false === $bytes || \strlen($bytes) !== $len) {
+            throw new \RuntimeException('NAR read error: unexpected EOF');
+        }
+
+        return $bytes;
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private function readString($handle): string
+    {
+        $len = $this->readU64LE($handle);
+        $str = $this->readBytes($handle, $len);
+        $pad = (8 - ($len % 8)) % 8;
+
+        if ($pad > 0) {
+            $this->readBytes($handle, $pad);
+        }
+
+        return $str;
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private function readU64LE($handle): int
+    {
+        $bytes = $this->readBytes($handle, 8);
+        $parts = unpack('V2', $bytes);
+
+        if (false === $parts) {
+            throw new \RuntimeException('NAR read error: could not unpack uint64_t');
+        }
+
+        return $parts[1] + ($parts[2] << 32);
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private function unpackObject($handle, string $path): void
+    {
+        $this->assertString($handle, '(');
+
+        $type = '';
+        $isExecutable = false;
+        $target = '';
+
+        while (true) {
+            $key = $this->readString($handle);
+
+            if (')' === $key) {
+                break;
+            }
+
+            switch ($key) {
+                case 'type':
+                    $type = $this->readString($handle);
+
+                    break;
+
+                case 'executable':
+                    $this->assertString($handle, '');
+                    $isExecutable = true;
+
+                    break;
+
+                case 'target':
+                    $target = $this->readString($handle);
+
+                    break;
+
+                case 'contents':
+                    if ('regular' !== $type) {
+                        throw new \RuntimeException("NAR format error: 'contents' outside of regular file.");
+                    }
+                    $len = $this->readU64LE($handle);
+
+                    $dir = \dirname($path);
+
+                    if (!file_exists($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
+                        throw new \RuntimeException("Cannot create directory: {$dir}");
+                    }
+
+                    $out = fopen($path, 'w');
+
+                    if (false === $out) {
+                        throw new \RuntimeException("Cannot open file for writing: {$path}");
+                    }
+                    $remaining = $len;
+
+                    while ($remaining > 0) {
+                        $chunkSize = min($remaining, 8192);
+                        $chunk = $this->readBytes($handle, $chunkSize);
+                        fwrite($out, $chunk);
+                        $remaining -= $chunkSize;
+                    }
+                    fclose($out);
+                    $pad = (8 - ($len % 8)) % 8;
+
+                    if ($pad > 0) {
+                        $this->readBytes($handle, $pad);
+                    }
+
+                    if ($isExecutable) {
+                        chmod($path, fileperms($path) | 0o111);
+                    }
+
+                    break;
+
+                case 'entry':
+                    if ('directory' !== $type) {
+                        throw new \RuntimeException("NAR format error: 'entry' outside of directory.");
+                    }
+                    $this->assertString($handle, '(');
+                    $this->assertString($handle, 'name');
+                    $name = $this->readString($handle);
+                    $this->assertString($handle, 'node');
+                    $this->unpackObject($handle, $path.'/'.$name);
+                    $this->assertString($handle, ')');
+
+                    break;
+
+                default:
+                    throw new \RuntimeException("NAR format error: unknown key '{$key}'");
+            }
+        }
+
+        switch ($type) {
+            case 'directory':
+                if (!file_exists($path) && !mkdir($path, 0o755, true) && !is_dir($path)) {
+                    throw new \RuntimeException("Cannot create directory: {$path}");
+                }
+
+                break;
+
+            case 'symlink':
+                // Ensure parent exists.
+                $dir = \dirname($path);
+                if (!file_exists($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
+                    throw new \RuntimeException("Cannot create directory: {$dir}");
+                }
+
+                // If something already exists at $path, remove it so symlink can be created.
+                if (file_exists($path) || is_link($path)) {
+                    if (!unlink($path)) {
+                        throw new \RuntimeException("Cannot remove existing path to create symlink: {$path}");
+                    }
+                }
+
+                if (false === symlink($target, $path)) {
+                    throw new \RuntimeException("Failed to create symlink: {$path} -> {$target}");
+                }
+
+                break;
+
+            case 'regular':
+                // Handled by 'contents' case
+                break;
+
+            default:
+                throw new \RuntimeException("NAR format error: unknown type '{$type}'");
+        }
     }
 }
