@@ -8,10 +8,22 @@
 
 ## Description
 
-A library to serialize a filesystem object (file, directory, symlink).
+Path Hasher is a PHP library for deterministically serializing and hashing
+filesystem objects (files, directories, and symlinks) using the
+[NAR (Nix ARchive) format](https://edolstra.github.io/pubs/phd-thesis.pdf)
+designed by Eelco Dolstra for the Nix ecosystem.
 
-The current implementation focuses on the NAR (Nix ARchive) format used by Nix
-for deterministic path hashing.
+This library enables you to:
+
+- Serialize any filesystem path into the NAR format, ensuring consistent and
+  reproducible results across platforms.
+- Compute cryptographic hashes of paths in multiple encodings (hex, SRI, Nix
+  base32), matching the output of the `nix hash path <path>` command.
+- Extract or reconstruct filesystem trees from NAR archives.
+
+See chapter 5 of Eelco Dolstra’s
+[PhD thesis](https://edolstra.github.io/pubs/phd-thesis.pdf) for technical
+details about the NAR format.
 
 ## Installation
 
@@ -40,6 +52,22 @@ nix hash path /path/to/your/file_or_directory
 ```
 
 The two outputs will match.
+
+To generate a NAR archive from a given path:
+
+```php
+<?php
+
+use Loophp\PathHasher\NAR;
+
+$nar = new NAR();
+
+$handle = fopen('vendor.nar', 'w');
+foreach ($nar->stream('./vendor') as $chunk) {
+    fwrite($handle, $chunk);
+}
+fclose($handle);
+```
 
 Methods available are:
 
@@ -71,12 +99,6 @@ sponsoring is a good, sound and safe way to show us some gratitude for the hours
 we invested in this package.
 
 Sponsor me on [Github][5] and/or any of [the contributors][6].
-
-## Changelog
-
-See [CHANGELOG.md][43] for a changelog based on [git commits][44].
-
-For more detailed changelogs, please check [the release changelogs][45].
 
 [1]: https://packagist.org/packages/loophp/path-hasher
 [2]: https://github.com/loophp/path-hasher/actions

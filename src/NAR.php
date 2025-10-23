@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Nix NAR Hasher.
+ * Nix NAR implementation.
  *
  * WHAT IT DOES
  * ------------
