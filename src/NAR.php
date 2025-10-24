@@ -195,15 +195,11 @@ final class NAR implements PathHasher
      */
     private function generateObjectChunk(string $p): \Generator
     {
-        yield from $this->generateStringChunk('(');
-
         yield from match (true) {
             is_link($p) => $this->handleSymlink($p),
             is_dir($p) => $this->handleDirectory($p),
             default => $this->handleRegularFile($p),
         };
-
-        yield from $this->generateStringChunk(')');
     }
 
     /**
@@ -228,7 +224,7 @@ final class NAR implements PathHasher
 
     private function handleDirectory(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type', 'directory');
+        yield from $this->generateStringChunk('(', 'type', 'directory');
 
         $iterator = new SortIterableAggregate(
             new \FilesystemIterator(
@@ -246,6 +242,8 @@ final class NAR implements PathHasher
 
             yield from $this->generateStringChunk(')');
         }
+
+        yield from $this->generateStringChunk(')');
     }
 
     /**
@@ -253,7 +251,7 @@ final class NAR implements PathHasher
      */
     private function handleRegularFile(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type', 'regular');
+        yield from $this->generateStringChunk('(', 'type', 'regular');
 
         if (is_file($p) && is_executable($p)) {
             yield from $this->generateStringChunk('executable', '');
@@ -296,11 +294,13 @@ final class NAR implements PathHasher
         if ($pad) {
             yield str_repeat("\x00", $pad);
         }
+
+        yield from $this->generateStringChunk(')');
     }
 
     private function handleSymlink(string $p): \Generator
     {
-        yield from $this->generateStringChunk('type', 'symlink', 'target', readlink($p) ?: '');
+        yield from $this->generateStringChunk('(', 'type', 'symlink', 'target', readlink($p) ?: '', ')');
     }
 
     /**
@@ -457,7 +457,7 @@ final class NAR implements PathHasher
                     $this->assertString($handle, 'name');
                     $name = $this->readString($handle);
                     $this->assertString($handle, 'node');
-                    $this->unpackObject($handle, $path.'/'.$name);
+                    $this->unpackObject($handle, \sprintf('%s%s%s', $path, \DIRECTORY_SEPARATOR, $name));
                     $this->assertString($handle, ')');
 
                     break;
