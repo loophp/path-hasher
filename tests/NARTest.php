@@ -32,27 +32,10 @@ final class NARTest extends TestCase
         self::assertSame((new NAR())->hash($path), $nixHash);
     }
 
-    public static function provideHashCases(): iterable
+    #[DataProvider('provideHashCases')]
+    public function testDumpAndUnpack(string $path): void
     {
-        yield [
-            realpath(__DIR__.'/fixtures/fs/test.md'),
-            'sha256-8Zli5QunHMIWw0Qr61FCdl2CLeLtBXUrC80Tw8PzaBY=',
-        ];
-
-        yield [
-            realpath(__DIR__.'/fixtures/fs/dir1'),
-            'sha256-WLBm1CL8lkhnV5HwP8oFwQjb00MU/VpCeuqkLzWTrO8=',
-        ];
-
-        yield [
-            realpath(__DIR__.'/fixtures/fs/'),
-            'sha256-o6L3G/JHuNm8sbq+/YBUjv/zBrlbj5854+1FkZoLGPY=',
-        ];
-    }
-
-    public function testDumpAndUnpack(): void
-    {
-        $source = realpath(__DIR__.'/fixtures/fs');
+        $source = $path;
         $this->narFile = tempnam(sys_get_temp_dir(), 'nar-test-');
         $this->destination = sys_get_temp_dir().'/nar-unpack-'.uniqid();
 
@@ -71,25 +54,22 @@ final class NARTest extends TestCase
         self::assertSame($sourceHash, $destinationHash);
     }
 
-    public function testDumpToStdoutAndUnpack(): void
+    public static function provideHashCases(): iterable
     {
-        $nar = new NAR();
-        $source = realpath(__DIR__.'/fixtures/fs');
-        $this->narFile = tempnam(sys_get_temp_dir(), 'nar-test-');
-        $this->destination = sprintf('%s/nar-unpack-%s', sys_get_temp_dir(), uniqid());
+        yield [
+            realpath(__DIR__.'/fixtures/fs/test.md'),
+            'sha256-8Zli5QunHMIWw0Qr61FCdl2CLeLtBXUrC80Tw8PzaBY=',
+        ];
 
-        $handle = fopen($this->narFile, 'w');
-        foreach ($nar->stream($source) as $chunk) {
-            fwrite($handle, $chunk);
-        }
-        fclose($handle);
+        yield [
+            realpath(__DIR__.'/fixtures/fs/dir1'),
+            'sha256-WLBm1CL8lkhnV5HwP8oFwQjb00MU/VpCeuqkLzWTrO8=',
+        ];
 
-        $nar->extract($this->narFile, $this->destination);
-
-        self::assertSame(
-            $nar->computeHashes($source),
-            $nar->computeHashes($this->destination)
-        );
+        yield [
+            realpath(__DIR__.'/fixtures/fs/'),
+            'sha256-o6L3G/JHuNm8sbq+/YBUjv/zBrlbj5854+1FkZoLGPY=',
+        ];
     }
 
     protected function tearDown(): void
