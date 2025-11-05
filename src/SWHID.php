@@ -85,23 +85,28 @@ final class SWHID implements PathHasher
 
     private function describeFilesystemObject(\SplFileInfo $fsObject): array
     {
+        $filename = $fsObject->getFilename();
+
         return match (true) {
             $fsObject->isLink() => [
-                'fsObject' => $fsObject,
+                'filename' => $filename,
                 'ctx' => 'cnt',
                 'mode' => '120000',
+                'sortKey' => $filename,
                 'hex' => $this->streamBlobFromString($fsObject->getLinkTarget()),
             ],
             $fsObject->isDir() => [
-                'fsObject' => $fsObject,
+                'filename' => $filename,
                 'ctx' => 'dir',
                 'mode' => '40000',
+                'sortKey' => \sprintf('%s/', $filename),
                 'hex' => $this->streamTree($fsObject->getPathname()),
             ],
             default => [
-                'fsObject' => $fsObject,
+                'filename' => $filename,
                 'ctx' => 'cnt',
                 'mode' => ($fsObject->isExecutable() ? '100755' : '100644'),
+                'sortKey' => $filename,
                 'hex' => $this->streamBlobFromFile($fsObject->getPathname()),
             ],
         };
@@ -207,9 +212,9 @@ final class SWHID implements PathHasher
                         ),
                         $this->describeFilesystemObject(...)
                     ),
-                    static fn (array $a, array $b): int => $a['fsObject']->getFilename() <=> $b['fsObject']->getFilename()
+                    static fn (array $a, array $b): int => $a['sortKey'] <=> $b['sortKey']
                 ),
-                fn (string $carry, array $e): string => \sprintf('%s%s %s%s%s', $carry, $e['mode'], $e['fsObject']->getFilename(), "\x00", hex2bin($this->computeBlobHash($e['hex']))),
+                fn (string $carry, array $e): string => \sprintf('%s%s %s%s%s', $carry, $e['mode'], $e['filename'], "\x00", hex2bin($this->computeBlobHash($e['hex']))),
                 ''
             );
 

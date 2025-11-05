@@ -33,7 +33,7 @@ final class SWHIDTest extends TestCase
 
         yield [
             realpath(__DIR__.'/fixtures/fs/'),
-            'swh:1:dir:8432270eb28bc1ece9b21ea9cbdef7ae146746c4',
+            'swh:1:dir:e96e9bb2c128f9f096a6b4f4f4535a3bb2b805b4',
         ];
     }
 }
