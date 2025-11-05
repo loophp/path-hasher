@@ -68,7 +68,7 @@ final class NARTest extends TestCase
 
         yield [
             realpath(__DIR__.'/fixtures/fs/'),
-            'sha256-o6L3G/JHuNm8sbq+/YBUjv/zBrlbj5854+1FkZoLGPY=',
+            'sha256-nXzAZxSDNwhiBLOZjSUZ9pjEbYkHy/B7kztPG9Ablz4=',
         ];
     }
 
