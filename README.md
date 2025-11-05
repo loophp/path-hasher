@@ -8,22 +8,23 @@
 
 ## Description
 
-Path Hasher is a PHP library for deterministically serializing and hashing
-filesystem objects (files, directories, and symlinks) using the
-[NAR (Nix ARchive) format](https://edolstra.github.io/pubs/phd-thesis.pdf)
-designed by Eelco Dolstra for the Nix ecosystem.
+Path Hasher is a PHP library for deterministically hashing filesystem objects
+(files, directories, and symlinks) in a reproducible and platform-independent
+way.
 
-This library enables you to:
+The library provides two implementations:
 
-- Serialize any filesystem path into the NAR format, ensuring consistent and
-  reproducible results across platforms.
-- Compute cryptographic hashes of paths in multiple encodings (hex, SRI, Nix
-  base32), matching the output of the `nix hash path <path>` command.
-- Extract or reconstruct filesystem trees from NAR archives.
+- **NAR**: Serializes and hashes paths using the Nix ARchive (NAR) format, as
+  used in the [Nix] ecosystem. See chapter 5 of Eelco Dolstra’s [PhD thesis] for
+  technical details about the NAR format.
+- **SWHID**: Computes [SWHID] (Software Heritage persistent identifiers) for
+  files, directories, and symlinks, following the [Software Heritage]
+  specification.
 
-See chapter 5 of Eelco Dolstra’s
-[PhD thesis](https://edolstra.github.io/pubs/phd-thesis.pdf) for technical
-details about the NAR format.
+With this library, you can:
+
+- Hash any filesystem path in a deterministic way (NAR, SWHID).
+- Extract or reconstruct filesystem trees from NAR archives (NAR)
 
 ## Installation
 
@@ -31,7 +32,9 @@ details about the NAR format.
 
 ## Usage
 
-### Basic Example
+### NAR Example
+
+<details>
 
 ```php
 <?php
@@ -69,6 +72,8 @@ foreach ($nar->stream('./vendor') as $chunk) {
 fclose($handle);
 ```
 
+</details>
+
 Methods available are:
 
 - `hash`: Compute the
@@ -77,6 +82,38 @@ Methods available are:
 - `extract`: Extract a NAR archive to a specified directory.
 - `stream`: Get a stream generator of the NAR archive.
 - `computeHashes`: Compute hashes of the NAR archive with different algorithms.
+
+### SWHID Example
+
+<details>
+
+````php
+<?php
+
+use Loophp\PathHasher\SWHID;
+
+$path = '/path/to/your/file_or_directory';
+
+// Compute the SWHID for a file, directory, or symlink
+$swhid = (new SWHID())->hash($path);
+
+echo $swhid; // Outputs e.g. swh:1:cnt:<sha1> or swh:1:dir:<sha1>```
+````
+
+</details>
+
+**Note:**
+
+- The SWHID implementation only supports the `"cnt"` (content) and `"dir"`
+  (directory) object types, which correspond to files, symlinks, and directories
+  on the filesystem.
+- Higher-level SWHID types (`"rel"` for release, `"rev"` for revision, `"snp"`
+  for snapshot) are **not supported** by this implementation yet.
+
+Methods available are:
+
+- `hash`: Compute the SWHID of a given path.
+- `stream`: Get a stream generator of the SWHID archive.
 
 ## Code quality, tests, benchmarks
 
@@ -119,6 +156,11 @@ Sponsor me on [Github][5] and/or any of [the contributors][6].
   https://img.shields.io/packagist/l/loophp/path-hasher.svg?style=flat-square
 [donate github]:
   https://img.shields.io/badge/Sponsor-Github-brightgreen.svg?style=flat-square
+[Nix]: https://nixos.org/
+[PhD thesis]: https://edolstra.github.io/pubs/phd-thesis.pdf
+[SWHID]:
+  https://docs.softwareheritage.org/devel/swh-model/persistent-identifiers.html
+[Software Heritage]: https://softwareheritage.org/
 [34]: https://github.com/loophp/path-hasher/issues
 [35]: https://www.phpunit.de/
 [36]: https://github.com/phpro/grumphp
