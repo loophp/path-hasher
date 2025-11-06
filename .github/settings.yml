@@ -47,7 +47,7 @@ repository:
     allow_squash_merge: true
     default_branch: main
     description: "Library to serialize a filesystem path"
-    topics: hasher,nix,nar,serialization
+    topics: hasher,nix,nar,serialization,swhid
     has_downloads: true
     has_issues: true
     has_pages: false

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Loophp\PathHasher;
 
 use loophp\iterators\MapIterableAggregate;
-use loophp\iterators\ReduceIterableAggregate;
 use loophp\iterators\SortIterableAggregate;
 
 /**
@@ -16,8 +15,8 @@ use loophp\iterators\SortIterableAggregate;
  *
  * SWHIDs are persistent, intrinsic identifiers for software artifacts, based on their content.
  * The supported object types are:
- *   - "cnt" (content): for files and symlinks (as Git blobs)
- *   - "dir" (directory): for directories (as Git trees)
+ *   - "cnt" (content): for files and symlinks
+ *   - "dir" (directory): for directories
  *
  * Higher-level SWHID types ("rel" for release, "rev" for revision, "snp" for snapshot)
  * are NOT supported by this implementation yet.
@@ -72,52 +71,59 @@ final class SWHID implements PathHasher
      */
     public function stream(string $path): \Generator
     {
-        $infos = $this->describeFilesystemObject(new \SplFileInfo($path));
+        $fsObject = new \SplFileInfo($path);
 
-        yield 'swh:1:';
+        $infos = $this->describeFilesystemObject($fsObject);
 
-        yield $infos['ctx'];
-
-        yield ':';
-
-        yield $this->computeBlobHash($infos['hex']);
+        yield \sprintf('swh:1:%s:%s', $infos['ctx'], bin2hex($this->computeBlobHash($infos['hashCallback']($fsObject))));
     }
 
+    /**
+     * Return an associative array.
+     *
+     * @return array{
+     *   fsObject: \SplFileInfo,
+     *   ctx: string,
+     *   mode: int,
+     *   sortKey: string,
+     *   hash: \Generator<string>
+     * }
+     */
     private function describeFilesystemObject(\SplFileInfo $fsObject): array
     {
         $filename = $fsObject->getFilename();
 
         return match (true) {
             $fsObject->isLink() => [
-                'filename' => $filename,
+                'fsObject' => $fsObject,
                 'ctx' => 'cnt',
-                'mode' => '120000',
+                'mode' => 120000,
                 'sortKey' => $filename,
-                'hex' => $this->streamBlobFromString($fsObject->getLinkTarget()),
+                'hashCallback' => $this->streamBlobFromString(...),
             ],
             $fsObject->isDir() => [
-                'filename' => $filename,
+                'fsObject' => $fsObject,
                 'ctx' => 'dir',
-                'mode' => '40000',
+                'mode' => 40000,
                 'sortKey' => \sprintf('%s/', $filename),
-                'hex' => $this->streamTree($fsObject->getPathname()),
+                'hashCallback' => $this->streamBlobFromDir(...),
             ],
             default => [
-                'filename' => $filename,
+                'fsObject' => $fsObject,
                 'ctx' => 'cnt',
-                'mode' => ($fsObject->isExecutable() ? '100755' : '100644'),
+                'mode' => ($fsObject->isExecutable() ? 100755 : 100644),
                 'sortKey' => $filename,
-                'hex' => $this->streamBlobFromFile($fsObject->getPathname()),
+                'hashCallback' => $this->streamBlobFromFile(...),
             ],
         };
     }
 
     /**
-     * Compute the Git-compatible SHA1 hash from a generator of content chunks.
+     * Compute the SHA1 hash from a generator of content chunks.
      *
      * @param \Generator $generator yields string chunks of the object serialization
      *
-     * @return string 40-character lowercase hex SHA1
+     * @return string Raw binary hash
      */
     private function computeBlobHash(\Generator $generator): string
     {
@@ -127,105 +133,66 @@ final class SWHID implements PathHasher
             hash_update($h, $chunk);
         }
 
-        return hash_final($h);
+        return hash_final($h, true);
     }
 
     /**
-     * Stream a Git blob object from a file.
-     *
-     * @param string $path path to the file
+     * Stream a blob object from a file object.
      *
      * @return \Generator<string>
-     *
-     * @throws \RuntimeException if the file cannot be read
      */
-    private function streamBlobFromFile(string $path): \Generator
+    private function streamBlobFromFile(\SplFileInfo $file): \Generator
     {
-        $size = filesize($path);
+        yield \sprintf("blob %s\0", $file->getSize());
 
-        if (false === $size) {
-            throw new \RuntimeException("Cannot stat file: {$path}");
-        }
+        $fh = fopen($file->getPathname(), 'r');
 
-        $fh = fopen($path, 'r');
+        while (!feof($fh)) {
+            $chunk = fread($fh, 8192);
 
-        if (false === $fh) {
-            throw new \RuntimeException("Cannot open file for reading: {$path}");
-        }
+            if (false === $chunk) {
+                fclose($fh);
 
-        yield 'blob ';
-
-        yield (string) $size;
-
-        yield "\0";
-
-        try {
-            while (!feof($fh)) {
-                $chunk = fread($fh, 8192);
-                if (false === $chunk) {
-                    throw new \RuntimeException("Error reading file: {$path}");
-                }
-
-                yield $chunk;
+                throw new \RuntimeException("Error reading file: {$file->getPathname()}");
             }
-        } finally {
-            fclose($fh);
+
+            yield $chunk;
         }
     }
 
     /**
-     * Stream a Git blob object from a string (used for symlink targets).
-     *
-     * @param string $bytes the string content
+     * Stream a blob object from a string (used for symlink targets).
      *
      * @return \Generator<string>
      */
-    private function streamBlobFromString(string $bytes): \Generator
+    private function streamBlobFromString(\SplFileInfo $fsObject): \Generator
     {
-        yield 'blob ';
-
-        yield (string) \strlen($bytes);
-
-        yield "\0";
-
-        yield $bytes;
+        yield \sprintf("blob %s\0%s", \strlen($fsObject->getLinkTarget()), $fsObject->getLinkTarget());
     }
 
     /**
-     * Stream a Git tree object for a directory.
-     *
-     * @param string $dir path to the directory
+     * Stream a tree object for a directory.
      *
      * @return \Generator<string>
-     *
-     * @throws \RuntimeException if the directory cannot be read
      */
-    private function streamTree(string $dir): \Generator
+    private function streamBlobFromDir(\SplFileInfo $dir): \Generator
     {
-        $treeIterable
-            = new ReduceIterableAggregate(
-                new SortIterableAggregate(
-                    new MapIterableAggregate(
-                        new \FilesystemIterator(
-                            $dir,
-                            \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::UNIX_PATHS
-                        ),
-                        $this->describeFilesystemObject(...)
-                    ),
-                    static fn (array $a, array $b): int => $a['sortKey'] <=> $b['sortKey']
+        $treeIterable = new SortIterableAggregate(
+            new MapIterableAggregate(
+                new \FilesystemIterator(
+                    $dir->getPathname(),
+                    \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::UNIX_PATHS
                 ),
-                fn (string $carry, array $e): string => \sprintf('%s%s %s%s%s', $carry, $e['mode'], $e['filename'], "\x00", hex2bin($this->computeBlobHash($e['hex']))),
-                ''
-            );
+                $this->describeFilesystemObject(...)
+            ),
+            static fn (array $a, array $b): int => $a['sortKey'] <=> $b['sortKey']
+        );
 
-        $treeHash = iterator_to_array($treeIterable, false)[0];
+        $treeHash = '';
+        foreach ($treeIterable as $e) {
+            $treeHash = \sprintf("%s%s %s\0%s", $treeHash, $e['mode'], $e['fsObject']->getFilename(), $this->computeBlobHash($e['hashCallback']($e['fsObject'])));
+        }
 
-        yield 'tree ';
-
-        yield (string) \strlen($treeHash);
-
-        yield "\0";
-
-        yield $treeHash;
+        yield \sprintf("tree %s\0%s", \strlen($treeHash), $treeHash);
     }
 }
