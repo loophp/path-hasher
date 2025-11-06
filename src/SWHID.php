@@ -91,28 +91,26 @@ final class SWHID implements PathHasher
      */
     private function describeFilesystemObject(\SplFileInfo $fsObject): array
     {
-        $filename = $fsObject->getFilename();
-
         return match (true) {
             $fsObject->isLink() => [
                 'fsObject' => $fsObject,
                 'ctx' => 'cnt',
                 'mode' => 120000,
-                'sortKey' => $filename,
+                'sortKey' => $fsObject->getFilename(),
                 'hashCallback' => $this->streamBlobFromString(...),
             ],
             $fsObject->isDir() => [
                 'fsObject' => $fsObject,
                 'ctx' => 'dir',
                 'mode' => 40000,
-                'sortKey' => \sprintf('%s/', $filename),
+                'sortKey' => \sprintf('%s/', $fsObject->getFilename()),
                 'hashCallback' => $this->streamBlobFromDir(...),
             ],
             default => [
                 'fsObject' => $fsObject,
                 'ctx' => 'cnt',
                 'mode' => ($fsObject->isExecutable() ? 100755 : 100644),
-                'sortKey' => $filename,
+                'sortKey' => $fsObject->getFilename(),
                 'hashCallback' => $this->streamBlobFromFile(...),
             ],
         };
@@ -190,7 +188,7 @@ final class SWHID implements PathHasher
 
         $treeHash = '';
         foreach ($treeIterable as $e) {
-            $treeHash = \sprintf("%s%s %s\0%s", $treeHash, $e['mode'], $e['fsObject']->getFilename(), $this->computeBlobHash($e['hashCallback']($e['fsObject'])));
+            $treeHash .= \sprintf("%s %s\0%s", $e['mode'], $e['fsObject']->getFilename(), $this->computeBlobHash($e['hashCallback']($e['fsObject'])));
         }
 
         yield \sprintf("tree %s\0%s", \strlen($treeHash), $treeHash);
