@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Loophp\PathHasher;
 
+use Generator;
 use loophp\iterators\MapIterableAggregate;
 use loophp\iterators\SortIterableAggregate;
 
@@ -119,7 +120,7 @@ final class SWHID implements PathHasher
     /**
      * Compute the SHA1 hash from a generator of content chunks.
      *
-     * @param \Generator $generator yields string chunks of the object serialization
+     * @param \Generator<string> $generator yields string chunks of the object serialization
      *
      * @return string Raw binary hash
      */
@@ -141,7 +142,7 @@ final class SWHID implements PathHasher
      */
     private function streamBlobFromFile(\SplFileInfo $file): \Generator
     {
-        yield \sprintf("blob %s\0", $file->getSize());
+        yield from $this->streamHeader('blob', $file->getSize());
 
         $fh = fopen($file->getPathname(), 'r');
 
@@ -165,7 +166,11 @@ final class SWHID implements PathHasher
      */
     private function streamBlobFromString(\SplFileInfo $fsObject): \Generator
     {
-        yield \sprintf("blob %s\0%s", \strlen($fsObject->getLinkTarget()), $fsObject->getLinkTarget());
+        $linkTarget = $fsObject->getLinkTarget();
+
+        yield from $this->streamHeader('blob', \strlen($linkTarget));
+
+        yield $linkTarget;
     }
 
     /**
@@ -175,6 +180,8 @@ final class SWHID implements PathHasher
      */
     private function streamBlobFromDir(\SplFileInfo $dir): \Generator
     {
+        $sortCallback = static fn (array $a, array $b): int => $a['sortKey'] <=> $b['sortKey'];
+
         $treeIterable = new SortIterableAggregate(
             new MapIterableAggregate(
                 new \FilesystemIterator(
@@ -183,7 +190,7 @@ final class SWHID implements PathHasher
                 ),
                 $this->describeFilesystemObject(...)
             ),
-            static fn (array $a, array $b): int => $a['sortKey'] <=> $b['sortKey']
+            $sortCallback
         );
 
         $treeHash = '';
@@ -191,6 +198,22 @@ final class SWHID implements PathHasher
             $treeHash .= \sprintf("%s %s\0%s", $e['mode'], $e['fsObject']->getFilename(), $this->computeBlobHash($e['hashCallback']($e['fsObject'])));
         }
 
-        yield \sprintf("tree %s\0%s", \strlen($treeHash), $treeHash);
+        yield from $this->streamHeader('tree', \strlen($treeHash));
+
+        yield $treeHash;
+    }
+
+    /**
+     * @return \Generator<string>
+     */
+    private function streamHeader(string $type, int $length): \Generator
+    {
+        yield $type;
+
+        yield ' ';
+
+        yield (string) $length;
+
+        yield "\0";
     }
 }
