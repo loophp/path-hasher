@@ -38,7 +38,7 @@
         "friendsofphp/php-cs-fixer": "^3.89",
         "phpro/grumphp": "^2",
         "phpunit/php-code-coverage": "^10",
-        "phpunit/phpunit": "^10"
+        "phpunit/phpunit": "^12"
     },
     "autoload": {
         "psr-4": {
