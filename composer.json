@@ -37,7 +37,7 @@
         "ergebnis/composer-normalize": "^2.48",
         "friendsofphp/php-cs-fixer": "^3.89",
         "phpro/grumphp": "^2",
-        "phpunit/php-code-coverage": "^10",
+        "phpunit/php-code-coverage": "^12",
         "phpunit/phpunit": "^10"
     },
     "autoload": {
