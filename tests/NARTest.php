@@ -18,9 +18,9 @@ final class NARTest extends TestCase
     private ?string $destination = null;
 
     #[DataProvider('provideHashCases')]
-    public function testHashStability(string $path, string $hash): void
+    public function testHashStability(string $path, array $hashes): void
     {
-        self::assertSame((new NAR())->hash($path), $hash);
+        self::assertSame((new NAR())->computeHashes($path), $hashes);
     }
 
     #[DataProvider('provideHashCases')]
@@ -58,17 +58,29 @@ final class NARTest extends TestCase
     {
         yield [
             realpath(__DIR__.'/fixtures/fs/test.md'),
-            'sha256-8Zli5QunHMIWw0Qr61FCdl2CLeLtBXUrC80Tw8PzaBY=',
+            [
+                'hex' => 'f19962e50ba71cc216c3442beb5142765d822de2ed05752b0bcd13c3c3f36816',
+                'nix32' => 'n0s6z1gqk8kphmlf58v5yn8hxjx4l8dxb1i6cb8qwq9phjbcrcw1',
+                'sri' => 'sha256-8Zli5QunHMIWw0Qr61FCdl2CLeLtBXUrC80Tw8PzaBY=',
+            ],
         ];
 
         yield [
             realpath(__DIR__.'/fixtures/fs/dir1'),
-            'sha256-WLBm1CL8lkhnV5HwP8oFwQjb00MU/VpCeuqkLzWTrO8=',
+            [
+                'hex' => '58b066d422fc9648675791f03fca05c108dbd34314fd5a427aeaa42f3593acef',
+                'nix32' => 'g7b7rsw54msm719bx756l9gv88hb05z7hg4gmk19n4z52avch5n0',
+                'sri' => 'sha256-WLBm1CL8lkhnV5HwP8oFwQjb00MU/VpCeuqkLzWTrO8=',
+            ],
         ];
 
         yield [
             realpath(__DIR__.'/fixtures/fs/'),
-            'sha256-nXzAZxSDNwhiBLOZjSUZ9pjEbYkHy/B7kztPG9Ablz4=',
+            [
+                'hex' => '9d7cc067148337086204b3998d2519f698c46d8907cbf07b933b4f1bd01b973e',
+                'nix32' => 'yr5p18g3gsf6rx1yby1jqniqqlxkijlirwc90i11pr09ik1qwb71',
+                'sri' => 'sha256-nXzAZxSDNwhiBLOZjSUZ9pjEbYkHy/B7kztPG9Ablz4=',
+            ],
         ];
     }
 
