@@ -76,7 +76,13 @@ final class SWHID implements PathHasher
 
         $infos = $this->describeFilesystemObject($fsObject);
 
-        yield \sprintf('swh:1:%s:%s', $infos['ctx'], bin2hex($this->computeBlobHash($infos['hashCallback']($fsObject))));
+        yield 'swh:1:';
+
+        yield $infos['ctx'];
+
+        yield ':';
+
+        yield $this->computeBlobHash($infos['hashCallback']($fsObject), false);
     }
 
     /**
@@ -124,7 +130,7 @@ final class SWHID implements PathHasher
      *
      * @return string Raw binary hash
      */
-    private function computeBlobHash(\Generator $generator): string
+    private function computeBlobHash(\Generator $generator, bool $binary = true): string
     {
         $h = hash_init('sha1');
 
@@ -132,7 +138,7 @@ final class SWHID implements PathHasher
             hash_update($h, $chunk);
         }
 
-        return hash_final($h, true);
+        return hash_final($h, $binary);
     }
 
     /**

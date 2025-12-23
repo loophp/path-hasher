@@ -87,11 +87,9 @@ final class NAR implements PathHasher
      */
     public function stream(string $path): \Generator
     {
-        $fileInfo = new \SplFileInfo($path);
-
         yield from $this->generateStringChunk('nix-archive-1');
 
-        yield from $this->generateObjectChunk($fileInfo);
+        yield from $this->generateObjectChunk(new \SplFileInfo($path));
     }
 
     public function hash(string $path): string
@@ -158,24 +156,27 @@ final class NAR implements PathHasher
             return '';
         }
 
-        $arr = array_values(unpack('C*', $bytes));
+        $arr = unpack('C*', $bytes);
         $digits = '';
 
-        while (\count($arr) > 0) {
-            $quot = [];
-            $carry = 0;
+        while ([] !== $arr) {
+            [$arr, $carry] = array_reduce(
+                $arr,
+                static function (array $result, int $b): array {
+                    $cur = ($result[1] << 8) + $b;
+                    $q = intdiv($cur, 32);
+                    $result[1] = $cur % 32;
 
-            foreach ($arr as $b) {
-                $cur = ($carry << 8) + $b;
-                $q = intdiv($cur, 32);
-                $carry = $cur % 32;
+                    if (([] !== $result[0]) || 0 < $q) {
+                        $result[0][] = $q;
+                    }
 
-                if (([] !== $quot) || 0 < $q) {
-                    $quot[] = $q;
-                }
-            }
+                    return $result;
+                },
+                [[], 0]
+            );
+
             $digits .= self::NIX_BASE32[$carry];
-            $arr = $quot;
         }
 
         $expectedLen = (int) ceil((\strlen($bytes) * 8) / 5);
@@ -224,6 +225,7 @@ final class NAR implements PathHasher
     {
         yield from $this->generateStringChunk('(', 'type', 'directory');
 
+        /** @var iterable<int, \SplFileInfo> */
         $iterator = new SortIterableAggregate(
             new \FilesystemIterator(
                 $p->getPathname(),
@@ -357,8 +359,7 @@ final class NAR implements PathHasher
      */
     private function readU64LE($handle): int
     {
-        $bytes = $this->readBytes($handle, 8);
-        $parts = unpack('V2', $bytes);
+        $parts = unpack('V2', $this->readBytes($handle, 8));
 
         if (false === $parts) {
             throw new \RuntimeException('NAR read error: could not unpack uint64_t');
